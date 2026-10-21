@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>진천 삼수초 원그리기 최강자를 찾아라!</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Canvas Confetti for high-score celebration -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700;800;900&family=Inter:wght@400;600;800&display=swap');
+    
+    * {
+      font-family: 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none; /* Prevent scroll while drawing */
+    }
+
+    /* Subtle grid background */
+    .blueprint-bg {
+      background-color: #0d1117;
+      background-image: 
+        radial-gradient(rgba(56, 189, 248, 0.08) 1.5px, transparent 0),
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 30px 30px, 60px 60px, 60px 60px;
+      background-position: 0 0, 0 0, 0 0;
+    }
+
+    /* Glow pulse for active target dot */
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.3; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.15); }
+    }
+    .pulse-glow {
+      animation: pulseGlow 2.5s infinite ease-in-out;
+    }
+
+    /* Card glow */
+    .neon-border {
+      box-shadow: 0 0 30px -5px rgba(56, 189, 248, 0.2);
+    }
+  </style>
+</head>
+<body class="blueprint-bg text-slate-100 min-h-screen flex flex-col items-center justify-between p-3 sm:p-5 overflow-hidden">
+
+  <!-- Header Section -->
+  <header class="w-full max-w-xl flex items-center justify-between z-10 pt-1 pb-2 gap-2">
+    <div>
+      <div class="flex items-center gap-2">
+        <span class="inline-flex p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30 shrink-0">
+          <i class="fa-solid fa-circle-notch text-lg"></i>
+        </span>
+        <h1 class="text-lg sm:text-2xl font-black tracking-tight text-white break-keep leading-tight">
+          진천 삼수초 <span class="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-emerald-400">원그리기 최강자</span>를 찾아라!
+        </h1>
+      </div>
+      <p class="text-xs text-slate-400 mt-0.5">손가락이나 마우스로 한 번에 완벽한 원을 완성해보세요!</p>
+    </div>
+
+    <!-- Best Score Badge -->
+    <div class="flex flex-col items-end bg-slate-900/90 border border-slate-700/70 rounded-xl px-3.5 py-1.5 shadow-lg shrink-0">
+      <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
+        <i class="fa-solid fa-trophy text-amber-400 text-xs"></i> 최고 점수
+      </span>
+      <span id="bestScoreText" class="text-lg font-black text-amber-300 leading-tight">0.0<span class="text-xs font-semibold text-amber-500/80">점</span></span>
+    </div>
+  </header>
+
+  <!-- Main Game Canvas Container -->
+  <main class="relative w-full max-w-xl flex-1 flex flex-col items-center justify-center my-2">
+    <div id="canvasWrapper" class="relative w-full h-[58vh] sm:h-[62vh] max-h-[620px] rounded-3xl overflow-hidden border border-slate-800 bg-slate-950/60 shadow-2xl backdrop-blur-md flex items-center justify-center">
+      
+      <!-- Center subtle helper dot -->
+      <div id="centerMarker" class="absolute pointer-events-none flex flex-col items-center justify-center opacity-40 transition-opacity duration-300">
+        <div class="w-3 h-3 rounded-full bg-sky-400/80 shadow-[0_0_12px_#38bdf8] pulse-glow"></div>
+        <div class="w-16 h-16 rounded-full border border-dashed border-sky-400/25 absolute"></div>
+      </div>
+
+      <!-- Main Interactive Canvas -->
+      <canvas id="circleCanvas" class="w-full h-full cursor-crosshair block"></canvas>
+
+      <!-- Idle Guide Overlay -->
+      <div id="startInstruction" class="absolute pointer-events-none text-center px-4 transition-all duration-300">
+        <div class="w-12 h-12 mx-auto rounded-full bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 mb-2.5 animate-bounce">
+          <i class="fa-solid fa-fingerprint text-xl"></i>
+        </div>
+        <p class="text-sm sm:text-base font-bold text-slate-200">화면을 누르고 동그라미를 그리세요</p>
+        <p class="text-xs text-slate-400 mt-1">손을 떼면 즉시 완벽한 원과 비교 분석합니다</p>
+      </div>
+
+      <!-- Live Drawing feedback message -->
+      <div id="liveFeedback" class="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/80 border border-slate-700/60 backdrop-blur-md px-3.5 py-1 rounded-full text-xs text-slate-300 hidden items-center gap-1.5 shadow-md">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+        <span>그리는 중... 손을 떼지 마세요</span>
+      </div>
+
+      <!-- Result HUD / Compact Floating Banner (Positioned at bottom so canvas center is 100% visible) -->
+      <div id="resultModal" class="absolute bottom-2 inset-x-2 sm:bottom-3 sm:inset-x-3 bg-slate-900/65 border border-slate-700/60 backdrop-blur-md rounded-2xl p-3 sm:p-4 transition-all duration-500 opacity-0 pointer-events-none translate-y-4 shadow-2xl flex flex-col gap-2.5 z-20">
+        
+        <!-- Top bar of the card: Score + Rating + Hide/View Toggle -->
+        <div class="flex items-center justify-between border-b border-slate-700/40 pb-2">
+          <div class="flex items-center gap-2.5">
+            <span id="scoreBadge" class="text-[11px] font-extrabold tracking-wider px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 uppercase">
+              평가 완료
+            </span>
+            <div class="flex items-baseline gap-1">
+              <span id="finalScoreDisplay" class="text-3xl sm:text-4xl font-black tracking-tight text-white drop-shadow-[0_0_15px_rgba(56,189,248,0.4)]">
+                0.0
+              </span>
+              <span class="text-sm sm:text-base font-bold text-sky-400">점</span>
+            </div>
+          </div>
+
+          <!-- Quick Visibility Dim Toggle -->
+          <button id="togglePeekBtn" type="button" class="text-[11px] font-medium text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-600/50 rounded-lg px-2.5 py-1 flex items-center gap-1 transition-all">
+            <i class="fa-regular fa-eye text-sky-400"></i>
+            <span id="togglePeekText">창 숨기기</span>
+          </button>
+        </div>
+
+        <!-- Grade Comment & Metrics row -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <p id="gradeComment" class="text-xs sm:text-sm font-semibold text-slate-200 truncate">
+            완벽에 가까운 솜씨입니다!
+          </p>
+
+          <!-- Metric chips -->
+          <div class="flex items-center gap-1.5 self-start sm:self-auto text-[11px]">
+            <span class="px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/70 text-slate-300">
+              균일도: <strong id="metricUniformity" class="text-emerald-400">92%</strong>
+            </span>
+            <span class="px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/70 text-slate-300">
+              닫힘: <strong id="metricClosure" class="text-sky-400">98%</strong>
+            </span>
+            <span class="px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/70 text-slate-300">
+              반경: <strong id="metricRadius" class="text-rose-400">120px</strong>
+            </span>
+          </div>
+        </div>
+
+        <!-- Visual legend explaining comparison -->
+        <div class="flex items-center justify-between pt-1 text-[11px] text-slate-400">
+          <div class="flex items-center gap-3">
+            <span class="flex items-center gap-1">
+              <span class="w-2.5 h-2.5 rounded-full bg-sky-400 shadow-[0_0_6px_#38bdf8]"></span>
+              <span class="text-slate-300">내 원</span>
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500 border border-red-300 shadow-[0_0_6px_#f43f5e]"></span>
+              <span class="text-rose-300 font-semibold">기준 원 (붉은 색)</span>
+            </span>
+          </div>
+          <span class="text-[10px] text-slate-400 hidden xs:inline">원 중심에 빨간 점 표시</span>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Bottom Control Panel -->
+  <footer class="w-full max-w-xl pb-2 z-10 flex flex-col gap-2.5">
+    <button id="resetBtn" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-sky-500 via-indigo-500 to-sky-600 hover:from-sky-400 hover:to-indigo-500 active:scale-[0.98] text-white font-extrabold text-base sm:text-lg shadow-lg shadow-sky-500/25 transition-all flex items-center justify-center gap-2.5">
+      <i class="fa-solid fa-rotate-right text-lg"></i>
+      <span>다시 시작</span>
+    </button>
+    <div class="flex items-center justify-between text-[11px] text-slate-400 px-2">
+      <span>💡 팁: 시작점과 끝점을 잘 이어줄수록 높은 점수가 나옵니다!</span>
+      <span id="soundToggle" class="cursor-pointer hover:text-slate-200 flex items-center gap-1">
+        <i class="fa-solid fa-volume-high text-sky-400"></i> 사운드 ON
+      </span>
+    </div>
+  </footer>
+
+  <!-- Audio Synthesizer (Pure Web Audio API) -->
+  <script>
+    const AudioEngine = {
+      ctx: null,
+      enabled: true,
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            this.ctx = new AudioContext();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      },
+
+      playStart() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(320, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(540, this.ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.15);
+      },
+
+      playEvaluate(score) {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const isHighScore = score >= 88;
+
+        const baseFreq = isHighScore ? 523.25 : 329.63; // C5 or E4
+        const chord = isHighScore ? [523.25, 659.25, 783.99, 1046.50] : [329.63, 392.00, 493.88];
+
+        chord.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = isHighScore ? 'triangle' : 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+
+          gain.gain.setValueAtTime(0.09, now + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.08 + 0.6);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+
+          osc.start(now + idx * 0.08);
+          osc.stop(now + idx * 0.08 + 0.6);
+        });
+      }
+    };
+  </script>
+
+  <!-- Main Game Logic Script -->
+  <script>
+    // State management
+    const canvas = document.getElementById('circleCanvas');
+    const ctx = canvas.getContext('2d');
+    const canvasWrapper = document.getElementById('canvasWrapper');
+    const startInstruction = document.getElementById('startInstruction');
+    const liveFeedback = document.getElementById('liveFeedback');
+    const resultModal = document.getElementById('resultModal');
+    const centerMarker = document.getElementById('centerMarker');
+    const finalScoreDisplay = document.getElementById('finalScoreDisplay');
+    const gradeComment = document.getElementById('gradeComment');
+    const scoreBadge = document.getElementById('scoreBadge');
+    const bestScoreText = document.getElementById('bestScoreText');
+    const metricUniformity = document.getElementById('metricUniformity');
+    const metricClosure = document.getElementById('metricClosure');
+    const metricRadius = document.getElementById('metricRadius');
+    const resetBtn = document.getElementById('resetBtn');
+    const soundToggle = document.getElementById('soundToggle');
+    const togglePeekBtn = document.getElementById('togglePeekBtn');
+    const togglePeekText = document.getElementById('togglePeekText');
+
+    let isDrawing = false;
+    let isEvaluated = false;
+    let isPeekHidden = false;
+    let points = [];
+    let bestScore = parseFloat(localStorage.getItem('circle_best_score') || '0.0');
+    bestScoreText.innerHTML = `${bestScore.toFixed(1)}<span class="text-xs font-semibold text-amber-500/80">점</span>`;
+
+    let referenceCircle = null; // { cx, cy, r }
+    let animationFrameId = null;
+
+    // Resize canvas safely with Device Pixel Ratio for crystal clear retina strokes
+    function resizeCanvas() {
+      const rect = canvasWrapper.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.resetTransform();
+      ctx.scale(dpr, dpr);
+
+      // Position center guide dot right in the center
+      centerMarker.style.left = `${rect.width / 2 - 32}px`;
+      centerMarker.style.top = `${rect.height / 2 - 32}px`;
+
+      redrawAll();
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    // Coordinate conversion
+    function getCanvasCoordinates(e) {
+      const rect = canvas.getBoundingClientRect();
+      let clientX = e.clientX;
+      let clientY = e.clientY;
+
+      if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      }
+
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      };
+    }
+
+    // Start drawing
+    function startStroke(e) {
+      if (isEvaluated) return;
+      // Prevent browser zoom or multi-touch interference
+      if (e.touches && e.touches.length > 1) return;
+
+      isDrawing = true;
+      points = [];
+      referenceCircle = null;
+
+      startInstruction.classList.add('opacity-0');
+      liveFeedback.classList.remove('hidden');
+      liveFeedback.classList.add('flex');
+      centerMarker.classList.add('opacity-10');
+
+      AudioEngine.playStart();
+
+      const pos = getCanvasCoordinates(e);
+      points.push(pos);
+      redrawAll();
+    }
+
+    // Moving stroke
+    function moveStroke(e) {
+      if (!isDrawing || isEvaluated) return;
+      e.preventDefault();
+
+      const pos = getCanvasCoordinates(e);
+      const lastPoint = points[points.length - 1];
+
+      // Discard duplicates or tiny jitter (<2px)
+      if (lastPoint) {
+        const dx = pos.x - lastPoint.x;
+        const dy = pos.y - lastPoint.y;
+        if (dx * dx + dy * dy < 4) return;
+      }
+
+      points.push(pos);
+      drawLiveSegment();
+    }
+
+    // End drawing -> trigger evaluation
+    function endStroke(e) {
+      if (!isDrawing) return;
+      isDrawing = false;
+      liveFeedback.classList.add('hidden');
+      liveFeedback.classList.remove('flex');
+
+      if (points.length < 25) {
+        // Too short / tap only
+        points = [];
+        redrawAll();
+        startInstruction.classList.remove('opacity-0');
+        centerMarker.classList.remove('opacity-10');
+        return;
+      }
+
+      isEvaluated = true;
+      evaluateCircle();
+    }
+
+    // Fast incremental live path drawing
+    function drawLiveSegment() {
+      if (points.length < 2) return;
+      const p1 = points[points.length - 2];
+      const p2 = points[points.length - 1];
+
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      // Neon glow outer
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+
+      // Sharp inner stroke
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // Full canvas redraw
+    function redrawAll() {
+      const rect = canvasWrapper.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      if (points.length > 1) {
+        // 1. Draw User Path
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Outer Glow
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.lineWidth = 10;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.stroke();
+
+        // Core Stroke
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.stroke();
+
+        // Highlight Start and End points
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath();
+        ctx.arc(points[0].x, points[0].y, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(points[points.length - 1].x, points[points.length - 1].y, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      // 2. Draw Comparison Circle (Vivid Red)
+      if (referenceCircle) {
+        const { cx, cy, r } = referenceCircle;
+        ctx.save();
+
+        // Outer red soft glow
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+        ctx.lineWidth = 9;
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Vivid red reference line
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 3.5;
+        ctx.setLineDash([7, 5]); // Clean dashed reference look
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Red Center Marker
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Subtle crosshair at center
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy);
+        ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy + 8);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+    }
+
+    // Mathematical Circle Evaluation
+    function evaluateCircle() {
+      const n = points.length;
+      
+      // 1. Calculate centroid (cx, cy)
+      let sumX = 0;
+      let sumY = 0;
+      for (let i = 0; i < n; i++) {
+        sumX += points[i].x;
+        sumY += points[i].y;
+      }
+      const cx = sumX / n;
+      const cy = sumY / n;
+
+      // 2. Calculate average radius (R)
+      let sumR = 0;
+      const distances = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        const dx = points[i].x - cx;
+        const dy = points[i].y - cy;
+        const d = Math.hypot(dx, dy);
+        distances[i] = d;
+        sumR += d;
+      }
+      const avgR = sumR / n;
+
+      // Safeguard for abnormally small drawings
+      if (avgR < 25) {
+        showEvaluationModal(0, 0, 0, avgR, "원이 너무 작습니다. 크게 그려보세요!");
+        return;
+      }
+
+      // Store reference circle for visual comparison
+      referenceCircle = { cx, cy, r: avgR };
+      redrawAll();
+
+      // 3. Radial Standard Deviation / Variation Error
+      let varianceSum = 0;
+      for (let i = 0; i < n; i++) {
+        const diff = Math.abs(distances[i] - avgR);
+        varianceSum += (diff / avgR); // Relative error percentage per point
+      }
+      const meanRelDeviation = varianceSum / n; // 0 for exact circle, > 0.3 for potato
+
+      // 4. Angular distribution / full sweep check
+      // Ensure the stroke made a roughly 360-degree sweep around the centroid
+      let totalAngleTraversed = 0;
+      let prevAngle = Math.atan2(points[0].y - cy, points[0].x - cx);
+      for (let i = 1; i < n; i++) {
+        const curAngle = Math.atan2(points[i].y - cy, points[i].x - cx);
+        let delta = curAngle - prevAngle;
+        // Normalize angle delta across -pi to +pi boundary
+        while (delta > Math.PI) delta -= 2 * Math.PI;
+        while (delta < -Math.PI) delta += 2 * Math.PI;
+        totalAngleTraversed += delta;
+        prevAngle = curAngle;
+      }
+      const angleCoverageRatio = Math.min(1.0, Math.abs(totalAngleTraversed) / (Math.PI * 2));
+
+      // 5. Loop closure gap check (Start vs End distance compared to radius)
+      const startP = points[0];
+      const endP = points[n - 1];
+      const gapDist = Math.hypot(endP.x - startP.x, endP.y - startP.y);
+      const gapRatio = gapDist / avgR; // 0 is perfectly closed, >0.5 is open arc
+      const closureScore = Math.max(0, 1 - gapRatio);
+
+      // Scoring formula:
+      // Uniformity: Perfect radius consistency gives 100%
+      const uniformityScore = Math.max(0, 1 - (meanRelDeviation * 2.8));
+
+      // Combined raw score
+      let finalScore = (uniformityScore * 0.75 + closureScore * 0.25) * 100;
+      
+      // Penalty if user didn't draw a full loop
+      if (angleCoverageRatio < 0.85) {
+        finalScore *= (angleCoverageRatio / 0.85);
+      }
+
+      // Clamp score
+      finalScore = Math.max(0, Math.min(99.9, finalScore));
+
+      // Friendly feedback comment
+      let feedback = "";
+      if (finalScore >= 95) {
+        feedback = "인간 컴퍼스 수준! 경이로운 완벽한 원입니다! 🎯";
+      } else if (finalScore >= 90) {
+        feedback = "완벽에 가까워요! 대단한 집중력입니다! 🌟";
+      } else if (finalScore >= 80) {
+        feedback = "아주 훌륭해요! 손놀림이 매우 부드럽습니다. 👍";
+      } else if (finalScore >= 70) {
+        feedback = "준수해요! 찌그러진 부분을 조금만 다듬어보세요.";
+      } else if (finalScore >= 50) {
+        feedback = "살짝 타원이나 감자 모양이 되었네요. 천천히 다시 도전!";
+      } else {
+        feedback = "원을 끝까지 둥글게 이어 그려보세요!";
+      }
+
+      AudioEngine.playEvaluate(finalScore);
+
+      // Trigger Confetti if high score
+      if (finalScore >= 90 && window.confetti) {
+        window.confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      }
+
+      // Update High Score
+      if (finalScore > bestScore) {
+        bestScore = finalScore;
+        localStorage.setItem('circle_best_score', bestScore.toString());
+        bestScoreText.innerHTML = `${bestScore.toFixed(1)}<span class="text-xs font-semibold text-amber-500/80">점</span>`;
+      }
+
+      showEvaluationModal(
+        finalScore,
+        Math.round(uniformityScore * 100),
+        Math.round(closureScore * 100),
+        Math.round(avgR),
+        feedback
+      );
+    }
+
+    // Modal & Counter Animation
+    function showEvaluationModal(score, uniformity, closure, radius, comment) {
+      gradeComment.innerText = comment;
+      metricUniformity.innerText = `${uniformity}%`;
+      metricClosure.innerText = `${closure}%`;
+      metricRadius.innerText = `${radius}px`;
+
+      if (score >= 90) {
+        scoreBadge.className = "text-xs font-bold tracking-widest px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase mb-2";
+        scoreBadge.innerText = "환상적인 결과";
+      } else if (score >= 75) {
+        scoreBadge.className = "text-xs font-bold tracking-widest px-3 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40 uppercase mb-2";
+        scoreBadge.innerText = "좋은 시도";
+      } else {
+        scoreBadge.className = "text-xs font-bold tracking-widest px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase mb-2";
+        scoreBadge.innerText = "도전 완료";
+      }
+
+      // Open Modal
+      resultModal.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4');
+      resultModal.classList.add('opacity-100', 'pointer-events-auto', 'translate-y-0');
+      isPeekHidden = false;
+      if (togglePeekText) togglePeekText.innerText = "창 숨기기";
+
+      // Count-up animation
+      let startTimestamp = null;
+      const duration = 900;
+
+      function step(timestamp) {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        const easeProgress = 1 - Math.pow(1 - progress, 3); // cubic ease out
+        const currentScore = (easeProgress * score).toFixed(1);
+        finalScoreDisplay.innerText = currentScore;
+
+        if (progress < 1) {
+          window.requestAnimationFrame(step);
+        } else {
+          finalScoreDisplay.innerText = score.toFixed(1);
+        }
+      }
+      window.requestAnimationFrame(step);
+    }
+
+    // Reset game state
+    function resetGame() {
+      isDrawing = false;
+      isEvaluated = false;
+      isPeekHidden = false;
+      points = [];
+      referenceCircle = null;
+
+      // Hide modal
+      resultModal.classList.remove('opacity-100', 'pointer-events-auto', 'translate-y-0');
+      resultModal.classList.add('opacity-0', 'pointer-events-none', 'translate-y-4');
+      if (togglePeekText) togglePeekText.innerText = "창 숨기기";
+
+      startInstruction.classList.remove('opacity-0');
+      liveFeedback.classList.add('hidden');
+      liveFeedback.classList.remove('flex');
+      centerMarker.classList.remove('opacity-10');
+
+      redrawAll();
+    }
+
+    // Toggle score card transparency/peek to inspect circle details
+    togglePeekBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      isPeekHidden = !isPeekHidden;
+      if (isPeekHidden) {
+        resultModal.classList.remove('opacity-100');
+        resultModal.classList.add('opacity-25');
+        togglePeekText.innerText = "창 보기";
+      } else {
+        resultModal.classList.remove('opacity-25');
+        resultModal.classList.add('opacity-100');
+        togglePeekText.innerText = "창 숨기기";
+      }
+    });
+
+    // Event Listeners for Touch, Pointer & Mouse
+    canvas.addEventListener('pointerdown', startStroke);
+    window.addEventListener('pointermove', moveStroke, { passive: false });
+    window.addEventListener('pointerup', endStroke);
+    window.addEventListener('pointercancel', endStroke);
+
+    // Reset button
+    resetBtn.addEventListener('click', resetGame);
+
+    // Audio toggle
+    soundToggle.addEventListener('click', () => {
+      AudioEngine.enabled = !AudioEngine.enabled;
+      if (AudioEngine.enabled) {
+        soundToggle.innerHTML = '<i class="fa-solid fa-volume-high text-sky-400"></i> 사운드 ON';
+        AudioEngine.playStart();
+      } else {
+        soundToggle.innerHTML = '<i class="fa-solid fa-volume-xmark text-slate-500"></i> 사운드 OFF';
+      }
+    });
+
+    // Window onload initialization
+    window.onload = function() {
+      resizeCanvas();
+    };
+  </script>
+</body>
+</html>
